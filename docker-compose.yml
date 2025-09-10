@@ -1,0 +1,225 @@
+# Docker Compose configuration for Personal Finance Management System
+# This file defines all the services (containers) our application needs
+# Think of it as a blueprint for our entire development environment
+
+version: '3.8'  # Docker Compose version (3.8 has all features we need)
+
+# Define all our services (each service is a separate container)
+services:
+  
+  # Main PHP/Laravel application container
+  app:
+    # Build the container using our custom Dockerfile
+    build:
+      context: .  # Build from current directory
+      dockerfile: docker/app/Dockerfile  # Use our custom Dockerfile
+    
+    # Container name (easier to identify in docker ps)
+    container_name: finance_app
+    
+    # Always restart if container stops (important for production)
+    restart: unless-stopped
+    
+    # Set working directory inside container
+    working_dir: /var/www/html
+    
+    # Mount our code into the container
+    # This allows us to edit code locally and see changes immediately
+    volumes:
+      # Mount current directory to container's web root
+      - .:/var/www/html
+      # Create a separate volume for vendor directory (performance optimization)
+      - ./storage:/var/www/html/storage
+      # Create a separate volume for bootstrap cache
+      - ./bootstrap/cache:/var/www/html/bootstrap/cache
+    
+    # Expose port 80 from container
+    ports:
+      - "8000:80"  # Map localhost:8000 to container:80
+    
+    # Environment variables for our Laravel app
+    environment:
+      # Database connection settings
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_DATABASE=personal_finance_db
+      - DB_USERNAME=finance_user
+      - DB_PASSWORD=secure_password_2024
+      
+      # Redis connection (for caching and queues)
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      
+      # Mail settings (using Mailhog for testing)
+      - MAIL_MAILER=smtp
+      - MAIL_HOST=mailhog
+      - MAIL_PORT=1025
+      - MAIL_USERNAME=null
+      - MAIL_PASSWORD=null
+    
+    # This container depends on these other services
+    # Docker will start mysql and redis before starting app
+    depends_on:
+      - mysql
+      - redis
+    
+    # Connect to our custom network
+    networks:
+      - finance_network
+
+  # MySQL database container
+  mysql:
+    # Use official MySQL 8.0 image
+    image: mysql:8.0
+    
+    # Container name
+    container_name: finance_mysql
+    
+    # Always restart if container stops
+    restart: unless-stopped
+    
+    # Environment variables for MySQL
+    environment:
+      # Root password (for administrative tasks)
+      - MYSQL_ROOT_PASSWORD=root_password_2024
+      # Default database to create
+      - MYSQL_DATABASE=personal_finance_db
+      # Default user to create
+      - MYSQL_USER=finance_user
+      - MYSQL_PASSWORD=secure_password_2024
+    
+    # Mount volumes for data persistence and initialization
+    volumes:
+      # Persist database data (survives container restarts)
+      - mysql_data:/var/lib/mysql
+      # Run our initialization script when container first starts
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    
+    # Expose MySQL port (for external access if needed)
+    ports:
+      - "3306:3306"
+    
+    # MySQL command with some optimizations
+    command: --default-authentication-plugin=mysql_native_password
+    
+    # Connect to our network
+    networks:
+      - finance_network
+
+  # Redis container (for caching and queue management)
+  redis:
+    # Use official Redis image
+    image: redis:7-alpine  # Alpine version is smaller
+    
+    # Container name
+    container_name: finance_redis
+    
+    # Always restart if container stops
+    restart: unless-stopped
+    
+    # Expose Redis port
+    ports:
+      - "6379:6379"
+    
+    # Persist Redis data
+    volumes:
+      - redis_data:/data
+    
+    # Redis command to enable data persistence
+    command: redis-server --appendonly yes
+    
+    # Connect to our network
+    networks:
+      - finance_network
+
+  # PHPMyAdmin (web-based MySQL administration)
+  phpmyadmin:
+    # Use official PHPMyAdmin image
+    image: phpmyadmin/phpmyadmin:latest
+    
+    # Container name
+    container_name: finance_phpmyadmin
+    
+    # Always restart if container stops
+    restart: unless-stopped
+    
+    # Expose web interface on port 8080
+    ports:
+      - "8080:80"
+    
+    # Configuration for PHPMyAdmin
+    environment:
+      # Connect to our MySQL container
+      - PMA_HOST=mysql
+      - PMA_PORT=3306
+      # Allow root login
+      - PMA_USER=root
+      - PMA_PASSWORD=root_password_2024
+    
+    # Depends on MySQL being running
+    depends_on:
+      - mysql
+    
+    # Connect to our network
+    networks:
+      - finance_network
+
+  # Mailhog (email testing tool)
+  mailhog:
+    # Use official Mailhog image
+    image: mailhog/mailhog:latest
+    
+    # Container name
+    container_name: finance_mailhog
+    
+    # Always restart if container stops
+    restart: unless-stopped
+    
+    # Expose ports
+    ports:
+      # SMTP port (for sending emails)
+      - "1025:1025"
+      # Web interface port (for viewing emails)
+      - "8025:8025"
+    
+    # Connect to our network
+    networks:
+      - finance_network
+
+  # Node.js container (for frontend asset compilation)
+  node:
+    # Use official Node.js image
+    image: node:18-alpine
+    
+    # Container name
+    container_name: finance_node
+    
+    # Working directory inside container
+    working_dir: /var/www/html
+    
+    # Mount our code
+    volumes:
+      - .:/var/www/html
+    
+    # Keep container running (for development)
+    command: tail -f /dev/null
+    
+    # Connect to our network
+    networks:
+      - finance_network
+
+# Define networks (allows containers to communicate)
+networks:
+  finance_network:
+    # Use bridge driver (default, allows container-to-container communication)
+    driver: bridge
+
+# Define volumes (for data persistence)
+volumes:
+  # MySQL data volume (persists database data)
+  mysql_data:
+    driver: local
+  
+  # Redis data volume (persists cache data)
+  redis_data:
+    driver: local
