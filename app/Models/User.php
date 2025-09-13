@@ -396,4 +396,162 @@ class User extends Authenticatable implements MustVerifyEmail
                     ->where('type', '!=', 'credit') // Don't alert for credit cards
                     ->get();
     }
+
+    // ========================================
+    // NOTIFICATION METHODS
+    // ========================================
+
+    /**
+     * Send email verification notification using our custom template.
+     * 
+     * This method overrides Laravel's default email verification notification
+     * to use our custom template that's specifically designed for financial
+     * applications with enhanced security messaging.
+     * 
+     * Called automatically when:
+     * - User registers and needs email verification
+     * - User requests new verification email
+     * - Email address is changed and needs re-verification
+     */
+    public function sendEmailVerificationNotification(): void
+    {
+        // Use our custom email verification notification class
+        // instead of Laravel's default one
+        $this->notify(new \App\Notifications\CustomVerifyEmail);
+    }
+
+    /**
+     * Send password reset notification using our custom template.
+     * 
+     * This method overrides Laravel's default password reset notification
+     * to use our custom template with enhanced security warnings and
+     * professional design appropriate for financial applications.
+     * 
+     * @param string $token The password reset token
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        // Use our custom password reset notification class
+        // with enhanced security messaging for financial apps
+        $this->notify(new \App\Notifications\CustomResetPassword($token));
+    }
+
+    /**
+     * Send a security alert notification.
+     * 
+     * This method sends notifications for various security events like:
+     * - Suspicious login attempts
+     * - Password changes
+     * - Email address changes
+     * - Account lockouts
+     * 
+     * @param string $event The security event type
+     * @param array $context Additional context data
+     */
+    public function sendSecurityAlert(string $event, array $context = []): void
+    {
+        // Log the security event for audit purposes
+        \Illuminate\Support\Facades\Log::info('Security alert sent', [
+            'user_id' => $this->id,
+            'event' => $event,
+            'context' => $context,
+            'timestamp' => now(),
+        ]);
+
+        // In a full implementation, you would create a SecurityAlert notification
+        // For now, we'll just log it. Example usage:
+        // $this->notify(new \App\Notifications\SecurityAlert($event, $context));
+    }
+
+    /**
+     * Send a financial alert notification.
+     * 
+     * This method handles financial notifications like:
+     * - Budget overspending alerts
+     * - Low account balance warnings
+     * - Bill due reminders
+     * - Goal milestone achievements
+     * 
+     * @param string $type The alert type
+     * @param array $data Alert-specific data
+     */
+    public function sendFinancialAlert(string $type, array $data = []): void
+    {
+        // Only send alerts if user has notifications enabled
+        if (!$this->budget_alerts_enabled && $type === 'budget') {
+            return;
+        }
+
+        if (!$this->bill_reminders_enabled && $type === 'bill') {
+            return;
+        }
+
+        // Log the financial alert
+        \Illuminate\Support\Facades\Log::info('Financial alert sent', [
+            'user_id' => $this->id,
+            'alert_type' => $type,
+            'data' => $data,
+            'timestamp' => now(),
+        ]);
+
+        // In a full implementation, you would create specific notification classes
+        // Example: $this->notify(new \App\Notifications\BudgetAlert($data));
+    }
+
+    /**
+     * Get the user's notification preferences.
+     * 
+     * Returns an array of the user's notification settings for easy checking
+     * before sending any notifications.
+     * 
+     * @return array
+     */
+    public function getNotificationPreferences(): array
+    {
+        return [
+            'budget_alerts' => $this->budget_alerts_enabled,
+            'bill_reminders' => $this->bill_reminders_enabled,
+            'bill_reminder_days' => $this->bill_reminder_days,
+            'marketing_emails' => $this->marketing_emails,
+            'email_verified' => $this->hasVerifiedEmail(),
+        ];
+    }
+
+    /**
+     * Check if user should receive a specific type of notification.
+     * 
+     * This method checks user preferences and account status to determine
+     * if a notification should be sent.
+     * 
+     * @param string $type The notification type
+     * @return bool
+     */
+    public function shouldReceiveNotification(string $type): bool
+    {
+        // Don't send notifications to inactive or suspended accounts
+        if ($this->status !== 'active') {
+            return false;
+        }
+
+        // Check specific notification preferences
+        switch ($type) {
+            case 'budget':
+                return $this->budget_alerts_enabled;
+            
+            case 'bill':
+                return $this->bill_reminders_enabled;
+            
+            case 'marketing':
+                return $this->marketing_emails;
+            
+            case 'security':
+                return true; // Always send security notifications
+            
+            case 'account':
+                return true; // Always send account-related notifications
+            
+            default:
+                return false;
+        }
+    }
 }
